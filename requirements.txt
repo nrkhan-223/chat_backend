@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+sqlmodel
+sqlalchemy[asyncio]
+asyncpg
+psycopg2-binary
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+pydantic[email]
+pydantic-settings
+redis
+boto3
+google-cloud-storage
+alembic

@@ -1,6 +1,3 @@
-"""
-SQLModel database models for the chat application.
-"""
 
 from models.models import (
     User,

@@ -1,7 +1,3 @@
-"""
-Users API endpoints.
-"""
-
 import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query

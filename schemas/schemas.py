@@ -1,7 +1,3 @@
-"""
-Pydantic schemas for request/response validation and serialization.
-Separate from SQLModel database models for clean API contracts.
-"""
 
 import uuid
 from datetime import datetime

@@ -1,6 +1,3 @@
-"""
-Channels API endpoints.
-"""
 
 import uuid
 import secrets

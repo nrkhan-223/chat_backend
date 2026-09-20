@@ -1,6 +1,4 @@
-"""
-Pydantic schemas for request/response validation.
-"""
+
 
 from schemas.schemas import (
     UserRegister,

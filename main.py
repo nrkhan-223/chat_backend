@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     logger.info("🚀 Starting Chat Application Backend...")
-    logger.info(f"📦 Database: {settings.DATABASE_URL}")
+    # logger.info(f"📦 Database: {settings.DATABASE_URL}")
     logger.info(f"💾 Storage Provider: {settings.STORAGE_PROVIDER}")
 
     # Initialize database

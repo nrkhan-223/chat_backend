@@ -1,7 +1,3 @@
-"""
-Global error handling middleware.
-Catches unhandled exceptions and returns proper JSON responses.
-"""
 
 import logging
 from fastapi import Request, status

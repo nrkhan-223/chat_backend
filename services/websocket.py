@@ -17,7 +17,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc, or_
 
-from database import async_session
+from database import get_session
 from models import (
     User, Channel, ChannelMember, Message,
     Attachment, Reaction, ChatType, UserStatus
@@ -67,7 +67,7 @@ class ConnectionManager:
         try:
             await asyncio.sleep(delay_seconds)
             if user_id not in self.active_connections:
-                async with async_session() as session:
+                async with get_session() as session:
                     result = await session.execute(select(User).where(User.id == user_id))
                     user = result.scalar_one_or_none()
                     if user and user.status != UserStatus.OFFLINE:
@@ -85,7 +85,7 @@ class ConnectionManager:
             logger.error(f"Error scheduling offline for {user_id}: {e}")
 
     async def _subscribe_user_to_chats(self, user_id: uuid.UUID):
-        async with async_session() as session:
+        async with get_session() as session:
             result = await session.execute(
                 select(ChannelMember.channel_id).where(ChannelMember.user_id == user_id)
             )
@@ -154,7 +154,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
         await websocket.close(code=4001, reason="Invalid or expired token")
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         result = await session.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         if not user:
@@ -163,7 +163,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
 
     await manager.connect(user_id, websocket)
 
-    async with async_session() as session:
+    async with get_session() as session:
         user.status = UserStatus.ONLINE
         session.add(user)
         await session.commit()
@@ -240,7 +240,7 @@ async def _handle_message_send(websocket: WebSocket, user_id: uuid.UUID, payload
         await websocket.send_json({"type": "channel:error", "payload": {"detail": "chat_id and content required"}})
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         chat_type, channel = await _validate_chat_access(session, user_id, chat_id)
         if not chat_type:
             await websocket.send_json({"type": "channel:error", "payload": {"detail": "No access to this chat"}})
@@ -332,7 +332,7 @@ async def _handle_message_edit(websocket: WebSocket, user_id: uuid.UUID, payload
     if not message_id or not content:
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         result = await session.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
         message = result.scalar_one_or_none()
         if not message:
@@ -358,7 +358,7 @@ async def _handle_message_delete(websocket: WebSocket, user_id: uuid.UUID, paylo
     if not message_id:
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         result = await session.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
         message = result.scalar_one_or_none()
         if not message:
@@ -380,7 +380,7 @@ async def _handle_message_react(websocket: WebSocket, user_id: uuid.UUID, payloa
     if not message_id or not emoji:
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         msg_uuid = uuid.UUID(message_id)
         existing = await session.execute(
             select(Reaction).where(and_(Reaction.message_id == msg_uuid, Reaction.user_id == user_id, Reaction.emoji == emoji))
@@ -421,7 +421,7 @@ async def _handle_message_pin(websocket: WebSocket, user_id: uuid.UUID, payload:
     if not message_id:
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         result = await session.execute(select(Message).where(Message.id == uuid.UUID(message_id)))
         message = result.scalar_one_or_none()
         if not message:
@@ -459,7 +459,7 @@ async def _handle_channel_create(websocket: WebSocket, user_id: uuid.UUID, paylo
         await websocket.send_json({"type": "channel:error", "payload": {"detail": "Channel name required"}})
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         is_private = payload.get("is_private", False)
         invite_code = secrets.token_urlsafe(12) if is_private else None
 
@@ -500,7 +500,7 @@ async def _handle_channel_join(websocket: WebSocket, user_id: uuid.UUID, payload
     if not channel_id:
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         ch_uuid = uuid.UUID(channel_id)
         result = await session.execute(select(Channel).where(Channel.id == ch_uuid))
         channel = result.scalar_one_or_none()
@@ -540,7 +540,7 @@ async def _handle_channel_leave(websocket: WebSocket, user_id: uuid.UUID, payloa
     if not channel_id:
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         ch_uuid = uuid.UUID(channel_id)
         result = await session.execute(
             select(ChannelMember).where(and_(ChannelMember.channel_id == ch_uuid, ChannelMember.user_id == user_id))
@@ -587,7 +587,7 @@ async def _handle_channel_add_member(websocket: WebSocket, user_id: uuid.UUID, p
     if not channel_id or not target_user_id:
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         ch_uuid = uuid.UUID(channel_id)
         target_uuid = uuid.UUID(target_user_id)
 
@@ -629,7 +629,7 @@ async def _handle_channel_remove_member(websocket: WebSocket, user_id: uuid.UUID
     if not channel_id or not target_user_id:
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         ch_uuid = uuid.UUID(channel_id)
         target_uuid = uuid.UUID(target_user_id)
 
@@ -668,7 +668,7 @@ async def _handle_channel_promote_admin(websocket: WebSocket, user_id: uuid.UUID
     if not channel_id or not target_user_id:
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         ch_uuid = uuid.UUID(channel_id)
         target_uuid = uuid.UUID(target_user_id)
 
@@ -704,7 +704,7 @@ async def _handle_channel_demote_admin(websocket: WebSocket, user_id: uuid.UUID,
     if not channel_id or not target_user_id:
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         ch_uuid = uuid.UUID(channel_id)
         target_uuid = uuid.UUID(target_user_id)
 
@@ -739,7 +739,7 @@ async def _handle_channel_update_settings(websocket: WebSocket, user_id: uuid.UU
     if not channel_id:
         return
 
-    async with async_session() as session:
+    async with get_session() as session:
         ch_uuid = uuid.UUID(channel_id)
         admin_check = await session.execute(
             select(ChannelMember).where(and_(ChannelMember.channel_id == ch_uuid, ChannelMember.user_id == user_id, ChannelMember.is_admin == True))
@@ -784,7 +784,7 @@ async def _handle_typing_start(websocket: WebSocket, user_id: uuid.UUID, payload
     typing = manager.get_typing_users(chat_id)
     user_ids = [uid for uid in typing.keys() if uid != user_id]
     user_names = []
-    async with async_session() as session:
+    async with get_session() as session:
         for uid in user_ids:
             result = await session.execute(select(User.name).where(User.id == uid))
             name = result.scalar_one_or_none()
@@ -806,7 +806,7 @@ async def _handle_typing_stop(websocket: WebSocket, user_id: uuid.UUID, payload:
     typing = manager.get_typing_users(chat_id)
     user_ids = [uid for uid in typing.keys() if uid != user_id]
     user_names = []
-    async with async_session() as session:
+    async with get_session() as session:
         for uid in user_ids:
             result = await session.execute(select(User.name).where(User.id == uid))
             name = result.scalar_one_or_none()
@@ -823,7 +823,7 @@ async def _handle_status_update(websocket: WebSocket, user_id: uuid.UUID, payloa
     new_status = payload.get("status")
     if not new_status or new_status not in ["online", "busy", "away"]:
         return
-    async with async_session() as session:
+    async with get_session() as session:
         result = await session.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         if not user:
@@ -863,7 +863,7 @@ async def _validate_chat_access(session: AsyncSession, user_id: uuid.UUID, chat_
 
 async def _build_init_payload(user_id: uuid.UUID) -> dict:
     """Build the initial payload sent on WebSocket connection."""
-    async with async_session() as session:
+    async with get_session() as session:
         users_result = await session.execute(select(User))
         all_users = users_result.scalars().all()
         users_data = [

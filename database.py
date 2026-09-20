@@ -1,49 +1,57 @@
+from typing import AsyncGenerator
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlmodel import SQLModel
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
 from config import settings
 
-
-# Create async engine
-engine = create_async_engine(
+# Create async engine with robust connection pooling
+engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
     pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=10,
+    pool_size=settings.DB_POOL_SIZE if hasattr(settings, "DB_POOL_SIZE") else 20,
+    max_overflow=settings.DB_MAX_OVERFLOW if hasattr(settings, "DB_MAX_OVERFLOW") else 10,
+    pool_recycle=1800,  # Recycle connections every 30 minutes to prevent stale/dropped connections
     connect_args={
-        "ssl": True,
+        "ssl": "require",  # Preferred string format for asyncpg / postgres drivers
     },
 )
 
-
-# Create async session factory
-async_session = sessionmaker(
-    engine,
+# Use async_sessionmaker instead of legacy sessionmaker(class_=AsyncSession)
+async_session_factory = async_sessionmaker(
+    bind=engine,
     class_=AsyncSession,
     expire_on_commit=False,
+    autoflush=False,  # Prevents unnecessary premature flushes before commit
 )
 
 
-async def get_session() -> AsyncSession:
-    """Dependency that provides an async database session."""
-    async with async_session() as session:
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """FastAPI dependency yielding an async database session.
+
+    Session cleanup and context management are handled automatically by the context manager.
+    Note: Explicit commit/rollback is typically handled at the service level,
+    but session.commit() on success is included here for simplicity.
+    """
+    async with async_session_factory() as session:
         try:
             yield session
             await session.commit()
         except Exception:
             await session.rollback()
             raise
-        finally:
-            await session.close()
 
 
-async def create_tables():
-    """Create all database tables. Used during startup."""
+async def create_tables() -> None:
+    """Create all database tables on application startup."""
     async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
+        await conn.run_sync(lambda sync_conn: SQLModel.metadata.create_all(bind=sync_conn))
 
 
-async def init_db():
-    """Initialize the database - create tables."""
-    await create_tables()
+async def close_db() -> None:
+    """Properly dispose of engine connections on application shutdown."""
+    await engine.dispose()

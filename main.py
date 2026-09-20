@@ -7,10 +7,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware import Middleware
 from fastapi.staticfiles import StaticFiles
 
 from config import settings
-from database import init_db
+from database import create_tables, close_db
 from routers import auth_router, messages_router, channels_router, users_router, upload_router
 from services.websocket import router as ws_router
 from services.pubsub import redis_pubsub
@@ -28,24 +29,37 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     logger.info("🚀 Starting Chat Application Backend...")
-    # logger.info(f"📦 Database: {settings.DATABASE_URL}")
     logger.info(f"💾 Storage Provider: {settings.STORAGE_PROVIDER}")
 
     # Initialize database
     try:
-        await init_db()
+        await create_tables()
         logger.info("✅ Database tables created/verified")
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
+        # Reraise if database initialization is a hard requirement to start the service
+        raise e
 
     # Connect to Redis
-    await redis_pubsub.connect()
+    try:
+        await redis_pubsub.connect()
+        logger.info("✅ Connected to Redis PubSub")
+    except Exception as e:
+        logger.error(f"❌ Redis connection failed: {e}")
+        raise e
 
     yield
 
     # Shutdown
-    await redis_pubsub.disconnect()
     logger.info("👋 Shutting down Chat Application Backend...")
+
+    # Clean up Redis connections
+    await redis_pubsub.disconnect()
+    logger.info("✅ Redis PubSub disconnected")
+
+    # Clean up Database connection pool
+    await close_db()
+    logger.info("✅ Database connection pool disposed")
 
 
 # Create FastAPI application
@@ -59,12 +73,12 @@ app = FastAPI(
 )
 
 # Add error handler middleware
-app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(ErrorHandlerMiddleware)  # type: ignore[arg-type] # pyright: ignore[reportArgumentType, reportCallIssue]
 
 # CORS Middleware
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    CORSMiddleware,  # type: ignore[arg-type]
+    allow_origins=list(settings.CORS_ORIGINS),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

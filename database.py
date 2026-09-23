@@ -31,12 +31,7 @@ async_session_factory = async_sessionmaker(
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency yielding an async database session.
 
-    Session cleanup and context management are handled automatically by the context manager.
-    Note: Explicit commit/rollback is typically handled at the service level,
-    but session.commit() on success is included here for simplicity.
-    """
     async with async_session_factory() as session:
         try:
             yield session

@@ -13,3 +13,4 @@ redis
 boto3
 google-cloud-storage
 alembic
+argon2

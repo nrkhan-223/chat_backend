@@ -3,7 +3,7 @@ import enum
 from datetime import datetime, timezone
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship, Column
-from sqlalchemy import Text, Integer, Enum as SAEnum
+from sqlalchemy import Text, Integer, DateTime, Enum as SAEnum
 
 
 # ==================== ENUMS ====================
@@ -44,7 +44,10 @@ class User(SQLModel, table=True):
     bio: Optional[str] = Field(default=None, sa_column=Column(Text))
     phone: Optional[str] = Field(default=None, max_length=20)
     is_bot: bool = Field(default=False)
-    created_at:datetime = Field(default_factory=lambda:datetime.now(timezone.utc), index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), index=True)
+    )
 
     # Relationships
     channel_memberships: List["ChannelMember"] = Relationship(back_populates="user")
@@ -61,7 +64,10 @@ class Channel(SQLModel, table=True):
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     is_private: bool = Field(default=False)
     topic: Optional[str] = Field(default=None, max_length=200)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), index=True)
+    )
     created_by: uuid.UUID = Field(foreign_key="users.id", index=True)
     invite_code: Optional[str] = Field(default=None, unique=True, max_length=50)
     only_admins_can_post: bool = Field(default=False)
@@ -78,7 +84,10 @@ class ChannelMember(SQLModel, table=True):
     channel_id: uuid.UUID = Field(foreign_key="channels.id", primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", primary_key=True)
     is_admin: bool = Field(default=False)
-    joined_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    joined_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), index=True)
+    )
 
     # Relationships
     channel: Optional[Channel] = Relationship(back_populates="members")
@@ -91,14 +100,19 @@ class Message(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     chat_id: str = Field(max_length=255, index=True)
-    # ✅ THE FIX
     chat_type: ChatType = Field(
         sa_column=Column(SAEnum(ChatType), index=True)
     )
     sender_id: uuid.UUID = Field(foreign_key="users.id", index=True)
     content: str = Field(sa_column=Column(Text))
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
-    edited_at: Optional[datetime] = Field(default=None)
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), index=True)
+    )
+    edited_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
     is_pinned: bool = Field(default=False)
     reply_to_id: Optional[uuid.UUID] = Field(default=None, foreign_key="messages.id")
 
@@ -106,8 +120,13 @@ class Message(SQLModel, table=True):
     sender: Optional[User] = Relationship(back_populates="sent_messages")
     attachments: List["Attachment"] = Relationship(back_populates="message")
     reactions: List["Reaction"] = Relationship(back_populates="message")
-    reply_to: Optional["Message"] = Relationship()
-    replies: List["Message"] = Relationship()
+    reply_to: Optional["Message"] = Relationship(
+        back_populates="replies",
+        sa_relationship_kwargs={"remote_side": "Message.id"}
+    )
+    replies: List["Message"] = Relationship(
+        back_populates="reply_to"
+    )
 
 
 class Attachment(SQLModel, table=True):
